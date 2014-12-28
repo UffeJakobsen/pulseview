@@ -2,6 +2,7 @@
  * This file is part of the PulseView project.
  *
  * Copyright (C) 2012-2013 Joel Holdsworth <joel@airwebreathe.org.uk>
+ * Copyright (C) 2014 Uffe Jakobsen <uffe@uffe.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -157,6 +158,8 @@ Connect::Connect(QWidget *parent, pv::DeviceManager &device_manager) :
 
 	layout_.addWidget(&form_);
 	layout_.addWidget(&button_box_);
+
+	device_selected(0);
 }
 
 shared_ptr<HardwareDevice> Connect::get_selected_device() const
@@ -170,6 +173,8 @@ shared_ptr<HardwareDevice> Connect::get_selected_device() const
 
 void Connect::populate_drivers()
 {
+	drivers_.addItem(QString("Autodetected devices"), qVariantFromValue(NULL));
+
 	for (auto& entry : device_manager_.context()->drivers()) {
 		auto name = entry.first;
 		auto driver = entry.second;
@@ -223,16 +228,27 @@ void Connect::scan_pressed()
 {
 	device_list_.clear();
 
-	const int index = drivers_.currentIndex();
-	if (index == -1)
+	const int index_cur = drivers_.currentIndex();
+	if (index_cur == -1)
 		return;
 
-	shared_ptr<Driver> driver =
-		drivers_.itemData(index).value<shared_ptr<Driver>>();
+	int index, index_max;
+	// Using pseudo autodetect driver (index 0): setup indexes for real driver scan
+	if (index_cur == 0) {
+		index = 1;
+		index_max = drivers_.count()-1;
+	} else {
+		index = index_max = index_cur;
+	}
 
-	assert(driver);
+	for(; index <= index_max; index++) {
 
-	map<const ConfigKey *, VariantBase> drvopts;
+		shared_ptr<Driver> driver =
+			drivers_.itemData(index).value<shared_ptr<Driver>>();
+
+		assert(driver);
+
+		map<const ConfigKey *, VariantBase> drvopts;
 
 	if (serial_config_->isEnabled()) {
 		QString serial;
@@ -275,6 +291,10 @@ void Connect::scan_pressed()
 		QString text = QString::fromStdString(device->display_name(device_manager_));
 		text += QString(" with %1 channels").arg(device->device()->channels().size());
 
+		// If autodetecting - show originating driver short name
+		if (index_cur == 0)
+			text += QString(" (%1)").arg(driver->name().c_str());
+
 		QListWidgetItem *const item = new QListWidgetItem(text, &device_list_);
 		item->setData(Qt::UserRole, QVariant::fromValue(device));
 		device_list_.addItem(item);
@@ -286,12 +306,20 @@ void Connect::scan_pressed()
 
 void Connect::driver_selected(int index)
 {
-	shared_ptr<Driver> driver =
-		drivers_.itemData(index).value<shared_ptr<Driver>>();
-
 	unset_connection();
 
-	populate_serials(driver);
+	// avoid pseudo autodetect driver (index 0)
+	if (index >= 1) {
+		shared_ptr<Driver> driver =
+			drivers_.itemData(index).value<shared_ptr<Driver>>();
+
+		if (driver->config_check(ConfigKey::SERIALCOMM, ConfigKey::SCAN_OPTIONS))
+			set_serial_connection(driver);
+
+    	populate_serials(driver);
+	}
+
+	scan_pressed();
 }
 
 } // namespace dialogs
