@@ -81,7 +81,7 @@ InputOutput::InputOutput(
 			prop = bind_enum(name, values, get, set);
 		else if (def_val.is_of_type(VariantType("d")))
 			prop = shared_ptr<Property>(new Double(name, 2, "",
-				nullptr, nullptr, get, set));
+				boost::none, boost::none, get, set));
 		else if (def_val.is_of_type(VariantType("u")))
 			prop = shared_ptr<Property>(
 				new Int(name, "", none, get, set));
